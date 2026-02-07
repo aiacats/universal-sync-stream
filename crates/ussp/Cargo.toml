@@ -1,0 +1,31 @@
+[package]
+name = "ussp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors = ["Your Name <your.email@example.com>"]
+description = "Universal Sync Stream Protocol - UDP-based synchronized video and multi-track audio streaming"
+
+[dependencies]
+tokio.workspace = true
+bytes.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+bitflags = "2"
+reed-solomon-erasure = "6"
+bincode = "1"
+parking_lot = "0.12"
+
+[dev-dependencies]
+tokio-test = "0.4"
+
+[[example]]
+name = "sender"
+path = "examples/sender.rs"
+
+[[example]]
+name = "receiver"
+path = "examples/receiver.rs"
