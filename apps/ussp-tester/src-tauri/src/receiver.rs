@@ -26,6 +26,7 @@ pub struct AudioLevelData {
     pub track_id: u16,
     pub level_db: f32,
     pub pts: u64,
+    pub samples: Vec<f32>, // Normalized samples for waveform display
 }
 
 /// Sync point data for frontend.
@@ -45,10 +46,19 @@ pub struct DmxFrameData {
     pub channels: Vec<u8>,
 }
 
-/// Calculate audio level in dB.
-fn calculate_audio_level(data: &[u8]) -> f32 {
+/// Audio analysis result.
+struct AudioAnalysis {
+    level_db: f32,
+    samples: Vec<f32>, // Downsampled normalized samples for display
+}
+
+/// Calculate audio level in dB and extract samples for waveform display.
+fn analyze_audio(data: &[u8]) -> AudioAnalysis {
     if data.is_empty() {
-        return -60.0;
+        return AudioAnalysis {
+            level_db: -60.0,
+            samples: vec![0.0; 64],
+        };
     }
 
     // Assume 16-bit stereo PCM
@@ -58,18 +68,36 @@ fn calculate_audio_level(data: &[u8]) -> f32 {
         .collect();
 
     if samples.is_empty() {
-        return -60.0;
+        return AudioAnalysis {
+            level_db: -60.0,
+            samples: vec![0.0; 64],
+        };
     }
 
-    // RMS calculation
+    // RMS calculation for level
     let sum_sq: f64 = samples.iter().map(|&s| (s as f64).powi(2)).sum();
     let rms = (sum_sq / samples.len() as f64).sqrt();
-
-    // Convert to dB
-    if rms > 0.0 {
+    let level_db = if rms > 0.0 {
         20.0 * (rms / 32768.0).log10() as f32
     } else {
         -60.0
+    };
+
+    // Downsample to 64 points for waveform display (mono, left channel)
+    let display_samples = 64;
+    let step = (samples.len() / 2).max(1) / display_samples; // /2 for stereo
+    let step = step.max(1);
+
+    let normalized: Vec<f32> = (0..display_samples)
+        .map(|i| {
+            let idx = (i * step * 2).min(samples.len().saturating_sub(1)); // *2 for stereo stride
+            samples.get(idx).map(|&s| s as f32 / 32768.0).unwrap_or(0.0)
+        })
+        .collect();
+
+    AudioAnalysis {
+        level_db,
+        samples: normalized,
     }
 }
 
@@ -161,12 +189,13 @@ pub async fn start_receiver(
                             audio_frames_received.fetch_add(1, Ordering::Relaxed);
                             last_audio_pts.store(frame.pts, Ordering::Relaxed);
 
-                            // Calculate and emit audio level
-                            let level = calculate_audio_level(&frame.data);
+                            // Analyze audio and emit data
+                            let analysis = analyze_audio(&frame.data);
                             let level_data = AudioLevelData {
                                 track_id: frame.track_id,
-                                level_db: level,
+                                level_db: analysis.level_db,
                                 pts: frame.pts,
+                                samples: analysis.samples,
                             };
 
                             let _ = app_clone.emit("ussp://audio-level", level_data);

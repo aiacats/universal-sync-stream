@@ -36,6 +36,7 @@ export interface AudioLevelData {
   track_id: number;
   level_db: number;
   pts: number;
+  samples: number[]; // Normalized samples (-1.0 to 1.0)
 }
 
 export interface SyncPointData {

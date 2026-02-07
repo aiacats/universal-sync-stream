@@ -3,13 +3,13 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { ReceiverStats, VideoFrameData, AudioLevelData, SyncPointData } from "../types";
 import Stats from "./Stats";
-import AudioMeter from "./AudioMeter";
+import AudioWaveform from "./AudioWaveform";
 
 function Receiver() {
   const [isRunning, setIsRunning] = useState(false);
   const [port, setPort] = useState(5001);
   const [stats, setStats] = useState<ReceiverStats | null>(null);
-  const [audioLevels, setAudioLevels] = useState<Map<number, number>>(new Map());
+  const [audioData, setAudioData] = useState<Map<number, { level: number; samples: number[] }>>(new Map());
   const [syncDiff, setSyncDiff] = useState<number>(0);
   const [logs, setLogs] = useState<string[]>([]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -29,9 +29,12 @@ function Receiver() {
     });
 
     const unlistenAudio = listen<AudioLevelData>("ussp://audio-level", (event) => {
-      setAudioLevels((prev) => {
+      setAudioData((prev) => {
         const next = new Map(prev);
-        next.set(event.payload.track_id, event.payload.level_db);
+        next.set(event.payload.track_id, {
+          level: event.payload.level_db,
+          samples: event.payload.samples,
+        });
         return next;
       });
     });
@@ -161,14 +164,19 @@ function Receiver() {
           <div className="sync-label">Video - Audio difference</div>
         </div>
 
-        <h2>Audio Levels</h2>
-        <div className="audio-meters">
-          {Array.from(audioLevels.entries())
+        <h2>Audio Waveforms</h2>
+        <div className="audio-waveforms">
+          {Array.from(audioData.entries())
             .sort((a, b) => a[0] - b[0])
-            .map(([trackId, level]) => (
-              <AudioMeter key={trackId} trackId={trackId} level={level} />
+            .map(([trackId, data]) => (
+              <AudioWaveform
+                key={trackId}
+                trackId={trackId}
+                level={data.level}
+                samples={data.samples}
+              />
             ))}
-          {audioLevels.size === 0 && (
+          {audioData.size === 0 && (
             <div style={{ color: "var(--text-secondary)", fontSize: 12 }}>
               No audio received yet
             </div>
