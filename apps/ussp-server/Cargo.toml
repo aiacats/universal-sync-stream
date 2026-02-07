@@ -1,0 +1,29 @@
+[package]
+name = "ussp-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "USSP SFU Server with Control Plane"
+
+[[bin]]
+name = "ussp-server"
+path = "src/main.rs"
+
+[dependencies]
+ussp = { path = "../../crates/ussp" }
+ussp-sfu = { path = "../../crates/ussp-sfu" }
+ussp-control = { path = "../../crates/ussp-control" }
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Web server
+axum = "0.8"
+
+# CLI
+clap = { version = "4", features = ["derive", "env"] }
+
+# Error handling
+anyhow = "1"
