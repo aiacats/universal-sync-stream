@@ -1,0 +1,32 @@
+[package]
+name = "ussp-sfu"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "USSP Selective Forwarding Unit (SFU) server"
+
+[dependencies]
+ussp = { path = "../ussp" }
+tokio.workspace = true
+bytes.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+thiserror.workspace = true
+
+# Async utilities
+futures = "0.3"
+async-trait = "0.1"
+
+# Data structures
+dashmap = "6"
+parking_lot = "0.12"
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Metrics
+metrics = "0.24"
+
+[dev-dependencies]
+tokio-test = "0.4"

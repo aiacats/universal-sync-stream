@@ -1,0 +1,36 @@
+[package]
+name = "ussp-control"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "USSP Control Plane for SFU management"
+
+[dependencies]
+ussp = { path = "../ussp" }
+ussp-sfu = { path = "../ussp-sfu" }
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+thiserror.workspace = true
+
+# Web framework
+axum = "0.8"
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+
+# Async utilities
+futures = "0.3"
+async-trait = "0.1"
+
+# Authentication
+jsonwebtoken = "9"
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# UUID
+uuid = { version = "1", features = ["v4", "serde"] }
+
+[dev-dependencies]
+tokio-test = "0.4"
