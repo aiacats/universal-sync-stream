@@ -91,8 +91,11 @@ fn is_receiver_running(state: State<'_, Arc<AppState>>) -> bool {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Set up file logging - writes to ussp-studio.log (overwrites on each run)
-    let log_dir = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    // Set up file logging - writes to ~/Library/Logs/ussp-studio/ussp-studio.log
+    let log_dir = dirs::home_dir()
+        .map(|h| h.join("Library").join("Logs").join("ussp-studio"))
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("/tmp")));
+    std::fs::create_dir_all(&log_dir).expect("Failed to create log directory");
     let log_file = std::fs::File::create(log_dir.join("ussp-studio.log"))
         .expect("Failed to create log file");
 

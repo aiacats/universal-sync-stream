@@ -25,6 +25,7 @@ bytes.workspace = true
 ussp = { path = "../../../crates/ussp" }
 base64 = "0.22"
 parking_lot = "0.12"
+dirs = "6"
 
 # Device capture (audio only, video uses ffmpeg)
 cpal = "0.15"
