@@ -1,9 +1,38 @@
+// Device information
+export interface VideoDeviceInfo {
+  index: number;
+  name: string;
+  description: string;
+}
+
+export interface AudioDeviceInfo {
+  index: number;
+  name: string;
+  sample_rate: number;
+  channels: number;
+}
+
+// Resolution options
+export type Resolution = "640x480" | "1280x720" | "1920x1080";
+
+// Video source
+export type VideoSource =
+  | { type: "test-pattern" }
+  | { type: "camera"; device_name: string };
+
+// Audio source
+export type AudioSource =
+  | { type: "test-tone" }
+  | { type: "microphone"; device_index: number };
+
+// Sender options
 export interface SenderOptions {
   audio_tracks: number;
   fec_enabled: boolean;
   fps: number;
-  width: number;
-  height: number;
+  resolution: Resolution;
+  video_source: VideoSource;
+  audio_source: AudioSource;
 }
 
 export interface SenderStats {
@@ -43,4 +72,11 @@ export interface SyncPointData {
   video_pts: number;
   audio_pts: number[];
   av_diff_us: number;
+}
+
+// Camera preview data
+export interface CameraPreviewData {
+  width: number;
+  height: number;
+  data: string; // Base64 encoded RGB data
 }

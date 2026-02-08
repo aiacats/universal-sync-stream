@@ -5,6 +5,7 @@ members = [
     "crates/ussp-sfu",
     "crates/ussp-control",
     "apps/ussp-tester/src-tauri",
+    "apps/ussp-admin/src-tauri",
     "apps/ussp-server",
 ]
 
@@ -22,3 +23,7 @@ serde_json = "1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 thiserror = "1"
+
+[patch.crates-io]
+nokhwa-bindings-macos = { path = "patches/nokhwa-bindings-macos" }
+nokhwa-core = { path = "patches/nokhwa-core" }
