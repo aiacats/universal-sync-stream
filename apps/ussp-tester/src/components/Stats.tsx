@@ -12,12 +12,9 @@ function Stats({ items }: StatsProps) {
   return (
     <div className="stats-grid">
       {items.map((item, index) => (
-        <div
-          key={index}
-          className={`stat-item ${item.fullWidth ? "full-width" : ""}`}
-        >
-          <div className="label">{item.label}</div>
-          <div className="value">{item.value}</div>
+        <div key={index} className="stat-item">
+          <span className="label">{item.label}:</span>
+          <span className="value">{item.value}</span>
         </div>
       ))}
     </div>

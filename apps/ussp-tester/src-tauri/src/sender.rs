@@ -1,7 +1,7 @@
 //! Sender logic for the USSP tester.
 
 use crate::capture::{
-    AudioCaptureHandle, AudioSource, CameraCaptureHandle, CameraFrame, ResolutionOption, VideoSource,
+    AudioCaptureHandle, AudioSource, CameraCaptureHandle, CameraFrame, PixelFormat, ResolutionOption, VideoSource,
 };
 use crate::state::{AppState, SenderStats};
 use bytes::Bytes;
@@ -35,6 +35,18 @@ impl Default for SenderOptions {
             audio_source: AudioSource::TestTone,
         }
     }
+}
+
+/// Convert BGRA to RGB.
+fn bgra_to_rgb(bgra: &[u8]) -> Vec<u8> {
+    let pixel_count = bgra.len() / 4;
+    let mut rgb = Vec::with_capacity(pixel_count * 3);
+    for chunk in bgra.chunks_exact(4) {
+        rgb.push(chunk[2]); // R
+        rgb.push(chunk[1]); // G
+        rgb.push(chunk[0]); // B
+    }
+    rgb
 }
 
 /// Generate a test pattern frame (color bars).
@@ -292,7 +304,7 @@ pub async fn start_sender(
         let audio_interval = Duration::from_millis(20); // 20ms audio frames
         let sync_interval = Duration::from_secs(1);
         let stats_interval = Duration::from_millis(500);
-        let preview_interval = Duration::from_millis(100); // 10 FPS for preview
+        let preview_interval = Duration::from_millis(66); // ~15fps for preview (JPEG in background)
 
         let mut video_ticker = interval(frame_interval);
         let mut audio_ticker = interval(audio_interval);
@@ -335,7 +347,12 @@ pub async fn start_sender(
                     // Get frame data based on source
                     let frame_data = if camera_handle.is_some() {
                         if let Some(ref frame) = latest_camera_frame {
-                            frame.data.clone()
+                            // Convert BGRA to RGB if needed
+                            if frame.format == PixelFormat::Bgra {
+                                bgra_to_rgb(&frame.data)
+                            } else {
+                                frame.data.clone()
+                            }
                         } else {
                             continue; // No frame available yet
                         }
@@ -367,23 +384,57 @@ pub async fn start_sender(
                 _ = preview_ticker.tick() => {
                     // Send camera preview to frontend
                     if let Some(ref frame) = latest_camera_frame {
-                        // Resize for preview (half resolution)
-                        let preview_data = resize_for_preview(
-                            &frame.data,
-                            frame.width,
-                            frame.height,
-                            frame.width / 2,
-                            frame.height / 2,
-                        );
-                        let encoded = base64::Engine::encode(
-                            &base64::engine::general_purpose::STANDARD,
-                            &preview_data,
-                        );
-                        let _ = app_clone.emit("ussp://camera-preview", serde_json::json!({
-                            "width": frame.width / 2,
-                            "height": frame.height / 2,
-                            "data": encoded,
-                        }));
+                        let frame_data = frame.data.clone();
+                        let frame_width = frame.width;
+                        let frame_height = frame.height;
+                        let frame_format = frame.format;
+                        let app_for_preview = app_clone.clone();
+
+                        // Spawn blocking task for resizing
+                        tokio::task::spawn_blocking(move || {
+                            // Fast downscale by 4x using simple sampling
+                            let preview_width = frame_width / 4;
+                            let preview_height = frame_height / 4;
+                            let bytes_per_pixel = if frame_format == PixelFormat::Bgra { 4 } else { 3 };
+                            let preview_bpp = 4; // Always output RGBA for canvas
+
+                            let mut preview_data = vec![0u8; (preview_width * preview_height * preview_bpp) as usize];
+
+                            for y in 0..preview_height {
+                                for x in 0..preview_width {
+                                    let src_x = x * 4;
+                                    let src_y = y * 4;
+                                    let src_idx = ((src_y * frame_width + src_x) * bytes_per_pixel) as usize;
+                                    let dst_idx = ((y * preview_width + x) * preview_bpp) as usize;
+
+                                    if src_idx + (bytes_per_pixel as usize) <= frame_data.len() {
+                                        if frame_format == PixelFormat::Bgra {
+                                            // BGRA -> RGBA
+                                            preview_data[dst_idx] = frame_data[src_idx + 2];     // R
+                                            preview_data[dst_idx + 1] = frame_data[src_idx + 1]; // G
+                                            preview_data[dst_idx + 2] = frame_data[src_idx];     // B
+                                            preview_data[dst_idx + 3] = 255;                     // A
+                                        } else {
+                                            // RGB -> RGBA
+                                            preview_data[dst_idx] = frame_data[src_idx];
+                                            preview_data[dst_idx + 1] = frame_data[src_idx + 1];
+                                            preview_data[dst_idx + 2] = frame_data[src_idx + 2];
+                                            preview_data[dst_idx + 3] = 255;
+                                        }
+                                    }
+                                }
+                            }
+
+                            let encoded = base64::Engine::encode(
+                                &base64::engine::general_purpose::STANDARD,
+                                &preview_data,
+                            );
+                            let _ = app_for_preview.emit("ussp://camera-preview-rgba", serde_json::json!({
+                                "width": preview_width,
+                                "height": preview_height,
+                                "data": encoded,
+                            }));
+                        });
                     }
                 }
 

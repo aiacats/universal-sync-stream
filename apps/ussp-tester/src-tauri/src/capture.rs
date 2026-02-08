@@ -1,10 +1,9 @@
-//! Device capture module for video and audio input.
+//! Device capture module for video and audio input using ffmpeg.
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use nokhwa::pixel_format::RgbFormat;
-use nokhwa::utils::{ApiBackend, RequestedFormat, RequestedFormatType};
-use nokhwa::Camera;
 use serde::{Deserialize, Serialize};
+use std::io::{BufRead, BufReader, Read};
+use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -82,29 +81,48 @@ impl Default for AudioSource {
     }
 }
 
-/// List available video devices.
+/// List available video devices using ffmpeg.
 pub fn list_video_devices() -> Result<Vec<VideoDeviceInfo>, String> {
-    let devices =
-        nokhwa::query(ApiBackend::Auto).map_err(|e| format!("Failed to query cameras: {}", e))?;
+    // Run ffmpeg to list devices
+    let output = Command::new("ffmpeg")
+        .args(["-f", "avfoundation", "-list_devices", "true", "-i", ""])
+        .stderr(Stdio::piped())
+        .stdout(Stdio::null())
+        .output()
+        .map_err(|e| format!("Failed to run ffmpeg: {}", e))?;
 
-    let result: Vec<VideoDeviceInfo> = devices
-        .into_iter()
-        .enumerate()
-        .map(|(list_idx, info)| {
-            // Get the actual camera index from CameraInfo
-            let camera_index = info.index().as_index().unwrap_or(0) as usize;
-            tracing::info!(
-                "list_video_devices: list_idx={}, camera_index={}, name={}",
-                list_idx, camera_index, info.human_name()
-            );
-            VideoDeviceInfo {
-                index: camera_index,
-                name: info.human_name(),
-                description: info.description().to_string(),
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let mut devices = Vec::new();
+    let mut in_video_section = false;
+
+    for line in stderr.lines() {
+        if line.contains("AVFoundation video devices:") {
+            in_video_section = true;
+            continue;
+        }
+        if line.contains("AVFoundation audio devices:") {
+            break;
+        }
+        if in_video_section {
+            // Parse lines like "[AVFoundation indev @ 0x...] [0] FaceTime HD Camera"
+            if let Some(bracket_pos) = line.rfind("] [") {
+                let after_bracket = &line[bracket_pos + 3..];
+                if let Some(end_bracket) = after_bracket.find(']') {
+                    if let Ok(index) = after_bracket[..end_bracket].parse::<usize>() {
+                        let name = after_bracket[end_bracket + 2..].trim().to_string();
+                        tracing::info!("list_video_devices: index={}, name={}", index, &name);
+                        devices.push(VideoDeviceInfo {
+                            index,
+                            name: name.clone(),
+                            description: name,
+                        });
+                    }
+                }
             }
-        })
-        .collect();
-    Ok(result)
+        }
+    }
+
+    Ok(devices)
 }
 
 /// List available audio input devices.
@@ -136,15 +154,23 @@ pub fn list_audio_devices() -> Result<Vec<AudioDeviceInfo>, String> {
     Ok(result)
 }
 
+/// Camera frame pixel format.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PixelFormat {
+    Rgb,
+    Bgra,
+}
+
 /// Camera frame data.
 #[derive(Debug, Clone)]
 pub struct CameraFrame {
     pub width: u32,
     pub height: u32,
     pub data: Vec<u8>,
+    pub format: PixelFormat,
 }
 
-/// Camera capture handle (runs in a separate thread).
+/// Camera capture handle using ffmpeg (runs in a separate thread).
 pub struct CameraCaptureHandle {
     running: Arc<AtomicBool>,
     width: u32,
@@ -153,7 +179,7 @@ pub struct CameraCaptureHandle {
 }
 
 impl CameraCaptureHandle {
-    /// Start camera capture in a dedicated thread.
+    /// Start camera capture using ffmpeg in a dedicated thread.
     pub fn start(
         device_name: String,
         resolution: ResolutionOption,
@@ -164,129 +190,132 @@ impl CameraCaptureHandle {
         let running = Arc::new(AtomicBool::new(true));
         let running_clone = Arc::clone(&running);
 
-        // We need to initialize camera in the thread
-        let (init_tx, init_rx) = std::sync::mpsc::channel::<Result<(u32, u32), String>>();
+        // Find device index by name
+        let devices = list_video_devices()?;
+        let device_index = devices
+            .iter()
+            .find(|d| d.name == device_name)
+            .map(|d| d.index)
+            .ok_or_else(|| format!("Camera not found: {}", device_name))?;
+
+        let (init_tx, init_rx) = std::sync::mpsc::channel::<Result<(), String>>();
 
         let thread = std::thread::spawn(move || {
-            tracing::info!("Opening camera by name: {}", device_name);
-
-            // Find camera by name to get the correct index
-            let camera_list = match nokhwa::query(ApiBackend::Auto) {
-                Ok(list) => list,
-                Err(e) => {
-                    let _ = init_tx.send(Err(format!("Failed to query cameras: {}", e)));
-                    return;
-                }
-            };
-
-            tracing::info!("Available cameras:");
-            for (i, info) in camera_list.iter().enumerate() {
-                tracing::info!("  [{}] index={:?}, name={}", i, info.index(), info.human_name());
-            }
-
-            // Find camera by name
-            let camera_info = camera_list.iter().find(|info| info.human_name() == device_name);
-            let index = match camera_info {
-                Some(info) => info.index().clone(),
-                None => {
-                    let _ = init_tx.send(Err(format!("Camera not found: {}", device_name)));
-                    return;
-                }
-            };
-
-            tracing::info!("Found camera '{}' at index {:?}", device_name, index);
-
-            // Use None to accept the camera's default format
-            // This is more compatible with virtual cameras like OBS Virtual Camera
-            let requested = RequestedFormat::new::<RgbFormat>(RequestedFormatType::None);
-
-            let mut camera = match Camera::new(index.clone(), requested) {
-                Ok(cam) => cam,
-                Err(e) => {
-                    tracing::error!("Failed with None format, error: {}", e);
-                    // Try with AbsoluteHighestResolution as fallback
-                    let requested2 = RequestedFormat::new::<RgbFormat>(
-                        RequestedFormatType::AbsoluteHighestResolution,
-                    );
-                    match Camera::new(index, requested2) {
-                        Ok(cam) => cam,
-                        Err(e2) => {
-                            let _ = init_tx.send(Err(format!("Failed to open camera: {}", e2)));
-                            return;
-                        }
-                    }
-                }
-            };
-
-            // Open the camera stream - this is required before capturing frames
-            if let Err(e) = camera.open_stream() {
-                let _ = init_tx.send(Err(format!("Failed to open camera stream: {}", e)));
-                return;
-            }
-
-            let actual_res = camera.resolution();
-            let actual_width = actual_res.width();
-            let actual_height = actual_res.height();
-
             tracing::info!(
-                "Camera opened and streaming: {}x{} (requested {}x{})",
-                actual_width,
-                actual_height,
+                "Starting ffmpeg capture: device={}, {}x{} @ {}fps",
+                device_index,
                 width,
-                height
+                height,
+                fps
             );
 
-            // Send actual resolution
-            if init_tx.send(Ok((actual_width, actual_height))).is_err() {
-                return;
+            // Build ffmpeg command
+            // -f avfoundation: use AVFoundation input
+            // -framerate: target frame rate
+            // -video_size: resolution
+            // -i "index:none": video device index, no audio
+            // -f rawvideo: output raw video
+            // -pix_fmt rgb24: RGB format
+            // pipe:1: output to stdout
+            let mut child = match Command::new("ffmpeg")
+                .args([
+                    "-f", "avfoundation",
+                    "-framerate", &fps.to_string(),
+                    "-video_size", &format!("{}x{}", width, height),
+                    "-i", &format!("{}:none", device_index),
+                    "-f", "rawvideo",
+                    "-pix_fmt", "rgb24",
+                    "-an",  // no audio
+                    "pipe:1",
+                ])
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped())
+                .spawn()
+            {
+                Ok(child) => child,
+                Err(e) => {
+                    let _ = init_tx.send(Err(format!("Failed to start ffmpeg: {}", e)));
+                    return;
+                }
+            };
+
+            // Spawn a thread to log stderr
+            if let Some(stderr) = child.stderr.take() {
+                std::thread::spawn(move || {
+                    let reader = BufReader::new(stderr);
+                    for line in reader.lines() {
+                        if let Ok(line) = line {
+                            tracing::debug!("ffmpeg: {}", line);
+                        }
+                    }
+                });
             }
-            let frame_interval = std::time::Duration::from_millis(1000 / fps as u64);
+
+            let stdout = match child.stdout.take() {
+                Some(stdout) => stdout,
+                None => {
+                    let _ = init_tx.send(Err("Failed to get ffmpeg stdout".to_string()));
+                    return;
+                }
+            };
+
+            // Signal successful initialization
+            let _ = init_tx.send(Ok(()));
+
+            let frame_size = (width * height * 3) as usize; // RGB24
+            let mut reader = BufReader::with_capacity(frame_size * 2, stdout);
+            let mut buffer = vec![0u8; frame_size];
+
+            let mut frame_count: u64 = 0;
+            let mut last_log_time = std::time::Instant::now();
 
             while running_clone.load(Ordering::Relaxed) {
-                match camera.frame() {
-                    Ok(frame) => {
-                        match frame.decode_image::<RgbFormat>() {
-                            Ok(decoded) => {
-                                let frame_data = CameraFrame {
-                                    width: actual_width,
-                                    height: actual_height,
-                                    data: decoded.to_vec(),
-                                };
-                                if frame_tx.send(frame_data).is_err() {
-                                    break;
-                                }
-                            }
-                            Err(e) => {
-                                tracing::warn!("Failed to decode frame: {}", e);
-                            }
+                // Read exactly one frame
+                match reader.read_exact(&mut buffer) {
+                    Ok(()) => {
+                        let frame_data = CameraFrame {
+                            width,
+                            height,
+                            data: buffer.clone(),
+                            format: PixelFormat::Rgb,
+                        };
+                        if frame_tx.send(frame_data).is_err() {
+                            break;
+                        }
+                        frame_count += 1;
+
+                        // Log FPS every second
+                        let now = std::time::Instant::now();
+                        if now.duration_since(last_log_time).as_secs() >= 1 {
+                            tracing::info!("Camera capture FPS: {}", frame_count);
+                            frame_count = 0;
+                            last_log_time = now;
                         }
                     }
                     Err(e) => {
-                        tracing::warn!("Failed to capture frame: {}", e);
+                        if running_clone.load(Ordering::Relaxed) {
+                            tracing::warn!("Failed to read frame: {}", e);
+                        }
+                        break;
                     }
                 }
-
-                std::thread::sleep(frame_interval);
             }
 
-            // Explicitly stop the camera stream before dropping
-            tracing::info!("Stopping camera stream...");
-            match camera.stop_stream() {
-                Ok(_) => tracing::info!("Camera stream stopped successfully"),
-                Err(e) => tracing::error!("Failed to stop camera stream: {}", e),
-            }
-            tracing::info!("Dropping camera object...");
-            drop(camera);
-            tracing::info!("Camera object dropped");
+            // Kill ffmpeg process
+            tracing::info!("Stopping ffmpeg...");
+            let _ = child.kill();
+            let _ = child.wait();
+            tracing::info!("ffmpeg stopped");
         });
 
         // Wait for initialization
         match init_rx.recv() {
-            Ok(Ok((actual_width, actual_height))) => {
+            Ok(Ok(())) => {
+                tracing::info!("Camera capture started: {}x{}", width, height);
                 Ok(Self {
                     running,
-                    width: actual_width,
-                    height: actual_height,
+                    width,
+                    height,
                     thread: Some(thread),
                 })
             }
@@ -309,7 +338,7 @@ impl CameraCaptureHandle {
 impl Drop for CameraCaptureHandle {
     fn drop(&mut self) {
         self.running.store(false, Ordering::Relaxed);
-        // Wait for thread to finish to ensure camera is properly released
+        // Wait for thread to finish
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();
         }
@@ -504,18 +533,18 @@ impl Drop for AudioCaptureHandle {
     }
 }
 
-/// Initialize nokhwa (required on macOS).
+/// Initialize camera backend (no-op for ffmpeg).
 pub fn initialize_camera_backend() -> Result<(), String> {
-    // On macOS, we need to request permission
-    #[cfg(target_os = "macos")]
-    {
-        nokhwa::nokhwa_initialize(|granted| {
-            if granted {
-                tracing::info!("Camera permission granted");
+    // Check if ffmpeg is available
+    match Command::new("ffmpeg").arg("-version").output() {
+        Ok(output) => {
+            if output.status.success() {
+                tracing::info!("ffmpeg is available");
+                Ok(())
             } else {
-                tracing::warn!("Camera permission denied");
+                Err("ffmpeg returned error".to_string())
             }
-        });
+        }
+        Err(e) => Err(format!("ffmpeg not found: {}", e)),
     }
-    Ok(())
 }

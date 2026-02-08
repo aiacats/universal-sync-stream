@@ -13,7 +13,8 @@ import type {
   AudioLevelData,
 } from "../types";
 import Stats from "./Stats";
-import AudioWaveform from "./AudioWaveform";
+import AudioLevelMeter from "./AudioLevelMeter";
+import ResizablePanels from "./ResizablePanels";
 
 function Sender() {
   const [isRunning, setIsRunning] = useState(false);
@@ -36,9 +37,10 @@ function Sender() {
 
   // Camera preview
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [captureResolution, setCaptureResolution] = useState<{ width: number; height: number } | null>(null);
 
-  // Audio waveform data
-  const [audioData, setAudioData] = useState<Map<number, { level: number; samples: number[] }>>(new Map());
+  // Audio level data (track_id -> level_db)
+  const [audioLevels, setAudioLevels] = useState<Map<number, number>>(new Map());
 
   const addLog = useCallback((message: string, _type: string = "info") => {
     const timestamp = new Date().toLocaleTimeString();
@@ -77,7 +79,7 @@ function Sender() {
       addLog(event.payload, "error");
     });
 
-    const unlistenPreview = listen<CameraPreviewData>("ussp://camera-preview", (event) => {
+    const unlistenPreview = listen<CameraPreviewData>("ussp://camera-preview-rgba", (event) => {
       const canvas = previewCanvasRef.current;
       if (!canvas) return;
 
@@ -88,30 +90,24 @@ function Sender() {
       canvas.width = width;
       canvas.height = height;
 
-      // Decode base64 and draw
+      // Store capture resolution (preview is 1/4 scale)
+      setCaptureResolution({ width: width * 4, height: height * 4 });
+
+      // Decode base64 RGBA and draw directly
       const binaryStr = atob(data);
-      const bytes = new Uint8Array(binaryStr.length);
+      const bytes = new Uint8ClampedArray(binaryStr.length);
       for (let i = 0; i < binaryStr.length; i++) {
         bytes[i] = binaryStr.charCodeAt(i);
       }
 
-      const imageData = ctx.createImageData(width, height);
-      for (let i = 0; i < width * height; i++) {
-        imageData.data[i * 4] = bytes[i * 3];     // R
-        imageData.data[i * 4 + 1] = bytes[i * 3 + 1]; // G
-        imageData.data[i * 4 + 2] = bytes[i * 3 + 2]; // B
-        imageData.data[i * 4 + 3] = 255;          // A
-      }
+      const imageData = new ImageData(bytes, width, height);
       ctx.putImageData(imageData, 0, 0);
     });
 
     const unlistenAudioLevel = listen<AudioLevelData>("ussp://sender-audio-level", (event) => {
-      setAudioData((prev) => {
+      setAudioLevels((prev) => {
         const next = new Map(prev);
-        next.set(event.payload.track_id, {
-          level: event.payload.level_db,
-          samples: event.payload.samples,
-        });
+        next.set(event.payload.track_id, event.payload.level_db);
         return next;
       });
     });
@@ -131,7 +127,7 @@ function Sender() {
   const handleStart = async () => {
     try {
       // Clear previous audio data
-      setAudioData(new Map());
+      setAudioLevels(new Map());
 
       const options: SenderOptions = {
         audio_tracks: audioTracks,
@@ -159,7 +155,8 @@ function Sender() {
     try {
       await invoke("stop_sender");
       setIsRunning(false);
-      setAudioData(new Map()); // Clear audio data
+      setAudioLevels(new Map()); // Clear audio levels
+      setCaptureResolution(null); // Clear capture resolution
       addLog("Stopped sending", "info");
     } catch (error) {
       addLog(`Failed to stop: ${error}`, "error");
@@ -195,10 +192,9 @@ function Sender() {
     return `mic:${audioSource.device_index}`;
   };
 
-  return (
-    <>
-      <div className="panel control-panel">
-        <h2>Sender Settings</h2>
+  const leftPanel = (
+    <div className="panel control-panel">
+      <h2>Sender Settings</h2>
 
         <div className="status-indicator">
           <div className={`dot ${isRunning ? "running" : "stopped"}`}></div>
@@ -327,25 +323,6 @@ function Sender() {
           </button>
         )}
 
-        <h2>Audio Waveforms</h2>
-        <div className="audio-waveforms">
-          {Array.from(audioData.entries())
-            .sort((a, b) => a[0] - b[0])
-            .map(([trackId, data]) => (
-              <AudioWaveform
-                key={trackId}
-                trackId={trackId}
-                level={data.level}
-                samples={data.samples}
-              />
-            ))}
-          {audioData.size === 0 && (
-            <div style={{ color: "var(--text-secondary)", fontSize: 12 }}>
-              {isRunning ? "Waiting for audio..." : "Start sending to see waveforms"}
-            </div>
-          )}
-        </div>
-
         <h2>Logs</h2>
         <div className="log-panel">
           {logs.map((log, i) => (
@@ -354,41 +331,59 @@ function Sender() {
             </div>
           ))}
         </div>
-      </div>
+    </div>
+  );
 
-      <div className="panel preview-panel">
-        <h2>Sender Statistics</h2>
+  const rightPanel = (
+    <div className="panel preview-panel">
+      <h2>Sender Statistics</h2>
 
-        {stats ? (
-          <Stats
-            items={[
-              { label: "Packets Sent", value: stats.packets_sent.toLocaleString() },
-              { label: "Bytes Sent", value: formatBytes(stats.bytes_sent) },
-              { label: "Video Frames", value: stats.video_frames_sent.toLocaleString() },
-              { label: "Audio Frames", value: stats.audio_frames_sent.toLocaleString() },
-              { label: "FPS", value: stats.fps.toFixed(1), fullWidth: true },
-            ]}
-          />
-        ) : (
-          <div className="stats-grid">
-            <div className="stat-item">
-              <div className="label">Status</div>
-              <div className="value">Not started</div>
-            </div>
+      {stats ? (
+        <Stats
+          items={[
+            { label: "Packets Sent", value: stats.packets_sent.toLocaleString() },
+            { label: "Bytes Sent", value: formatBytes(stats.bytes_sent) },
+            { label: "Video Frames", value: stats.video_frames_sent.toLocaleString() },
+            { label: "Audio Frames", value: stats.audio_frames_sent.toLocaleString() },
+            { label: "FPS", value: stats.fps.toFixed(1), fullWidth: true },
+          ]}
+        />
+      ) : (
+        <div className="stats-grid">
+          <div className="stat-item">
+            <div className="label">Status</div>
+            <div className="value">Not started</div>
           </div>
-        )}
+        </div>
+      )}
 
-        <h2>Preview</h2>
-        <div className="video-preview">
+      <h2>Preview</h2>
+      <div className="video-preview-container">
+        <div className="video-preview-16x9">
           {videoSource.type === "camera" ? (
             <canvas ref={previewCanvasRef} />
           ) : (
             <TestPatternPreview isRunning={isRunning} />
           )}
         </div>
+        {isRunning && (
+          <div className="video-preview-info">
+            {captureResolution && (
+              <span>{captureResolution.width}x{captureResolution.height}</span>
+            )}
+            {stats && (
+              <span>{stats.fps.toFixed(1)} fps</span>
+            )}
+          </div>
+        )}
       </div>
-    </>
+
+      <h2>Audio Levels</h2>
+      <AudioLevelMeter levels={audioLevels} />
+    </div>
   );
+
+  return <ResizablePanels left={leftPanel} right={rightPanel} />;
 }
 
 function TestPatternPreview({ isRunning }: { isRunning: boolean }) {

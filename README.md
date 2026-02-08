@@ -287,6 +287,84 @@ npm run tauri build
 - 送信先: `127.0.0.1:5001`
 - 受信ポート: `5001`
 
+## USSP Admin (SFU管理GUIアプリケーション)
+
+SFUサーバーを管理するためのデスクトップGUIアプリケーション（Tauri 2 + React）です。
+
+### ビルド方法
+
+```bash
+cd apps/ussp-admin
+
+# 依存関係インストール
+npm install
+
+# 開発モード
+npm run tauri dev
+
+# リリースビルド
+npm run tauri build
+```
+
+### 機能
+
+#### ダッシュボード
+- Control Planeのヘルス状態表示
+- グローバル統計（サーバー数、ルーム数、参加者数、転送量）
+- 5秒間隔の自動リフレッシュ
+
+#### ルーム管理
+- ルーム一覧表示（状態、参加者数、割り当てサーバー）
+- 新規ルーム作成（カスタムID または 自動生成）
+- ルーム削除
+- ルーム詳細表示:
+  - 統計情報（パケット数、転送バイト数、稼働時間）
+  - Primary/Backup Sender状態
+  - 参加者一覧（ID、ロール、接続先アドレス、セッションID）
+  - 参加者の強制退出
+
+#### サーバー管理
+- SFUサーバー一覧表示
+- サーバーヘルス状態（Healthy/Unhealthy）
+- ロード状況のビジュアル表示
+- ルーム数・参加者数の確認
+
+#### 接続設定
+- Control Plane URL設定
+- API Key認証
+- 接続状態表示
+
+### 使用方法
+
+1. アプリケーションを起動
+2. 「Settings」タブでControl Plane URLとAPI Keyを入力
+3. 「Connect」をクリックして接続
+4. 「Dashboard」「Rooms」「Servers」タブで管理
+
+### スクリーンショット概要
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  USSP Admin   [Dashboard] [Rooms] [Servers] [Settings]  ●  │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  Control Plane Status                          [Healthy]    │
+│  Version: 0.1.0                                             │
+│                                                             │
+│  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐           │
+│  │    3    │ │   12    │ │   45    │ │ 1.2 GB  │           │
+│  │ Servers │ │  Rooms  │ │ Users   │ │Forwarded│           │
+│  └─────────┘ └─────────┘ └─────────┘ └─────────┘           │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 注意事項
+
+- 管理対象のSFUサーバー（ussp-server）が起動している必要があります
+- admin ロールのAPI Keyが必要です
+- 開発モード（`--no-auth`）で起動されたサーバーには任意のAPI Keyで接続可能
+
 ## USSP SFUサーバー
 
 インターネット配信向けのSFU（Selective Forwarding Unit）サーバーを提供します。
@@ -543,13 +621,31 @@ ussp/                               # ワークスペースルート
     │   └── src/
     │       └── main.rs             # エントリポイント
     │
-    └── ussp-tester/                # GUIテスター
+    ├── ussp-tester/                # GUIテスター
+    │   ├── src-tauri/              # Tauri バックエンド
+    │   │   ├── Cargo.toml
+    │   │   └── src/
+    │   ├── src/                    # React フロントエンド
+    │   ├── package.json
+    │   └── README.md
+    │
+    └── ussp-admin/                 # SFU管理GUI
         ├── src-tauri/              # Tauri バックエンド
         │   ├── Cargo.toml
         │   └── src/
+        │       ├── lib.rs          # Tauriコマンド
+        │       ├── api.rs          # HTTPクライアント
+        │       └── main.rs         # エントリポイント
         ├── src/                    # React フロントエンド
-        ├── package.json
-        └── README.md
+        │   ├── App.tsx             # メインコンポーネント
+        │   ├── components/         # UIコンポーネント
+        │   │   ├── Dashboard.tsx   # ダッシュボード
+        │   │   ├── Rooms.tsx       # ルーム一覧
+        │   │   ├── RoomDetail.tsx  # ルーム詳細
+        │   │   ├── Servers.tsx     # サーバー一覧
+        │   │   └── Settings.tsx    # 接続設定
+        │   └── types/              # 型定義
+        └── package.json
 ```
 
 ## クイックスタート

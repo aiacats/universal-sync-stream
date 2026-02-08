@@ -2356,6 +2356,13 @@ mod internal {
             let cls = class!(AVCaptureVideoDataOutput);
             let inner: *mut Object = unsafe { msg_send![cls, new] };
 
+            // Force BGRA output format for better performance (avoids slow YUYV->RGB conversion)
+            let bgra_format = CFNumber::from(kCVPixelFormatType_32BGRA as i32);
+            let format_obj = bgra_format.as_CFTypeRef() as *mut Object;
+            let key = unsafe { kCVPixelBufferPixelFormatTypeKey } as *mut Object;
+            let dict = unsafe { NSDictionary::dictionaryWithObject_forKey_(nil, format_obj, key) };
+            let _: () = unsafe { msg_send![inner, setVideoSettings:dict] };
+
             AVCaptureVideoDataOutput { inner }
         }
     }
