@@ -1,6 +1,6 @@
-# USSP Tester
+# USSP Studio
 
-USSPプロトコルをテストするためのGUIアプリケーションです。Tauri 2 + React + TypeScriptで構築されています。
+USSPプロトコルによるストリーム送受信GUIアプリケーションです。Tauri 2 + React + TypeScriptで構築されています。
 
 ## 必要環境
 
@@ -12,7 +12,7 @@ USSPプロトコルをテストするためのGUIアプリケーションです�
 
 ```bash
 # リポジトリのクローン後
-cd apps/ussp-tester
+cd apps/ussp-studio
 
 # 依存関係のインストール
 npm install
@@ -171,7 +171,7 @@ Error: Address already in use
 ## プロジェクト構造
 
 ```
-ussp-tester/
+ussp-studio/
 ├── src/                    # Reactフロントエンド
 │   ├── App.tsx            # メインコンポーネント
 │   ├── App.css            # スタイル

@@ -1,12 +1,12 @@
 [package]
-name = "ussp-tester"
+name = "ussp-studio"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "USSP Protocol Tester GUI"
+description = "USSP Studio - Stream Sender/Receiver GUI"
 
 [lib]
-name = "ussp_tester_lib"
+name = "ussp_studio_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

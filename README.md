@@ -230,14 +230,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-## USSP Tester (GUIアプリケーション)
+## USSP Studio (GUIアプリケーション)
 
-テスト用GUIアプリケーション（Tauri 2 + React）が同梱されています。
+ストリーム送受信用GUIアプリケーション（Tauri 2 + React）が同梱されています。
 
 ### ビルド方法
 
 ```bash
-cd apps/ussp-tester
+cd apps/ussp-studio
 
 # 依存関係インストール
 npm install
@@ -621,7 +621,7 @@ ussp/                               # ワークスペースルート
     │   └── src/
     │       └── main.rs             # エントリポイント
     │
-    ├── ussp-tester/                # GUIテスター
+    ├── ussp-studio/                # ストリーム送受信GUI
     │   ├── src-tauri/              # Tauri バックエンド
     │   │   ├── Cargo.toml
     │   │   └── src/
@@ -672,7 +672,7 @@ curl -X POST http://localhost:8080/api/v1/rooms \
   -d '{"room_id": "test-room"}'
 
 # ターミナル3: GUIテスターで送受信
-cd apps/ussp-tester && npm run tauri dev
+cd apps/ussp-studio && npm run tauri dev
 ```
 
 ## テスト

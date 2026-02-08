@@ -10,7 +10,7 @@ function App() {
   return (
     <div className="app">
       <header className="header">
-        <h1>USSP Tester</h1>
+        <h1>USSP Studio</h1>
         <div className="mode-toggle">
           <button
             className={mode === "sender" ? "active" : ""}

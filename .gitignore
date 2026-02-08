@@ -23,8 +23,8 @@ yarn-debug.log*
 yarn-error.log*
 
 # Tauri
-apps/ussp-tester/src-tauri/target/
-apps/ussp-tester/src-tauri/gen/schemas/
+apps/ussp-studio/src-tauri/target/
+apps/ussp-studio/src-tauri/gen/schemas/
 
 # Build outputs
 dist/

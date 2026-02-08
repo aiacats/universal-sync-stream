@@ -3,8 +3,8 @@
 <plist version="1.0">
 <dict>
     <key>NSCameraUsageDescription</key>
-    <string>USSP Tester needs access to your camera to capture and stream video.</string>
+    <string>USSP Studio needs access to your camera to capture and stream video.</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>USSP Tester needs access to your microphone to capture and stream audio.</string>
+    <string>USSP Studio needs access to your microphone to capture and stream audio.</string>
 </dict>
 </plist>

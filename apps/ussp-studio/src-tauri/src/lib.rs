@@ -1,4 +1,4 @@
-//! USSP Tester Tauri commands.
+//! USSP Studio Tauri commands.
 
 mod capture;
 mod receiver;
@@ -91,9 +91,9 @@ fn is_receiver_running(state: State<'_, Arc<AppState>>) -> bool {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Set up file logging - writes to ussp-tester.log (overwrites on each run)
+    // Set up file logging - writes to ussp-studio.log (overwrites on each run)
     let log_dir = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
-    let log_file = std::fs::File::create(log_dir.join("ussp-tester.log"))
+    let log_file = std::fs::File::create(log_dir.join("ussp-studio.log"))
         .expect("Failed to create log file");
 
     // Create file and stdout layers
@@ -111,7 +111,7 @@ pub fn run() {
             .add_directive(tracing::Level::INFO.into()))
         .init();
 
-    tracing::info!("USSP Tester starting, log file: {:?}", log_dir.join("ussp-tester.log"));
+    tracing::info!("USSP Studio starting, log file: {:?}", log_dir.join("ussp-studio.log"));
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())

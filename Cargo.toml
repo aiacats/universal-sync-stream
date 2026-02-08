@@ -4,7 +4,7 @@ members = [
     "crates/ussp",
     "crates/ussp-sfu",
     "crates/ussp-control",
-    "apps/ussp-tester/src-tauri",
+    "apps/ussp-studio/src-tauri",
     "apps/ussp-admin/src-tauri",
     "apps/ussp-server",
 ]

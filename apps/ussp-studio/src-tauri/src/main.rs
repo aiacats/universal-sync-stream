@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    ussp_tester_lib::run()
+    ussp_studio_lib::run()
 }

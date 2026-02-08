@@ -1,0 +1,78 @@
+# Claude Code 作業ログ
+
+---
+
+## 2026-02-08 (2)
+
+### 実装内容
+
+#### アプリ名称変更: ussp-tester → ussp-studio
+- テスターアプリが実務用途に成長したため、名称を「USSP Studio」に変更
+- `git mv`でディレクトリをリネーム（git履歴を保持）
+- 全ファイル内の名称参照を一括更新
+
+### 変更箇所
+- ディレクトリ: `apps/ussp-tester/` → `apps/ussp-studio/`
+- Cargo.toml (ワークスペース): workspace member パス更新
+- .gitignore: パス更新
+- README.md (ルート): アプリ名・パス・説明文更新
+- apps/ussp-studio/package.json: name変更
+- apps/ussp-studio/package-lock.json: name変更
+- apps/ussp-studio/index.html: title変更
+- apps/ussp-studio/README.md: アプリ名・説明文・パス更新
+- apps/ussp-studio/src/App.tsx: h1テキスト変更
+- apps/ussp-studio/src-tauri/Cargo.toml: package name, lib name, description変更
+- apps/ussp-studio/src-tauri/tauri.conf.json: productName, identifier, title変更
+- apps/ussp-studio/src-tauri/src/main.rs: ussp_tester_lib → ussp_studio_lib
+- apps/ussp-studio/src-tauri/src/lib.rs: コメント・ログファイル名変更
+- apps/ussp-studio/src-tauri/Info.plist: 権限説明文変更
+
+### 潜在的問題・懸念点
+- .claude/claudeLog.txtの過去ログには旧名称が残っている（履歴として意図的に維持）
+
+---
+
+## 2026-02-08
+
+### 実装内容
+
+#### 1. カメラキャプチャのffmpeg移行
+- **問題点**: nokhwaライブラリを使用したFaceTime HD Cameraのキャプチャが2 FPSしか出ない問題
+- **原因**: nokhwaがYUYV形式でしかキャプチャできず、フォーマット変換のオーバーヘッドが大きかった
+- **解決策**: nokhwaを廃止し、ffmpegサブプロセスでカメラキャプチャを実装
+  - AVFoundation経由でRGB24形式で直接キャプチャ
+  - パフォーマンス: 2 FPS → 30 FPS に改善
+
+#### 2. UI改善
+- **リサイズ可能パネル**: 左右パネル間にドラッグハンドルを追加（ResizablePanels.tsx）
+- **オーディオレベルメーター**: 波形表示からミキシングコンソール風の縦レベルメーターに変更（AudioLevelMeter.tsx）
+- **16:9プレビュー**: padding-bottom: 56.25%ハックで正確な16:9アスペクト比を実現
+- **FPS/解像度表示**: プレビュー下部に現在のキャプチャ情報を表示
+- **統計表示のコンパクト化**: Stats.tsxをインライン表示形式に変更
+- **スクロール対応**: コンテンツがあふれた場合のスクロールを有効化
+
+#### 3. その他
+- macOS権限用Info.plistを追加（カメラ/マイクアクセス用）
+- CLAUDE.mdのマージ（開発ガイドラインの統合）
+
+### 変更ファイル
+- apps/ussp-tester/src-tauri/Cargo.toml
+- apps/ussp-tester/src-tauri/src/capture.rs
+- apps/ussp-tester/src-tauri/src/sender.rs
+- apps/ussp-tester/src/components/Sender.tsx
+- apps/ussp-tester/src/components/Stats.tsx
+- apps/ussp-tester/src/styles.css
+- apps/ussp-tester/src-tauri/Info.plist（新規）
+- apps/ussp-tester/src/components/AudioLevelMeter.tsx（新規）
+- apps/ussp-tester/src/components/ResizablePanels.tsx（新規）
+- CLAUDE.md
+
+### コミット
+- b540deb: feat(tester): Replace nokhwa with ffmpeg for camera capture and improve UI
+
+### 潜在的問題・懸念点
+- ffmpegがシステムにインストールされている必要がある（依存関係）
+- AVFoundationはmacOS専用のため、他プラットフォームでは別の実装が必要
+- カメラデバイス一覧取得がffmpegのstderr出力のパースに依存している
+
+---
