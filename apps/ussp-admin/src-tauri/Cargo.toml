@@ -1,0 +1,22 @@
+[package]
+name = "ussp-admin"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "USSP SFU Admin GUI"
+
+[lib]
+name = "ussp_admin_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["devtools"] }
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", features = ["json"] }
+tracing = "0.1"
