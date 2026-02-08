@@ -514,14 +514,12 @@ pub async fn start_sender(
             }
         }
 
-        // Cleanup
-        if let Some(audio) = audio_handle {
-            audio.stop();
-        }
-        if let Some(camera) = camera_handle {
-            camera.stop();
-        }
+        // Cleanup - explicitly drop handles to ensure resources are released
+        // Drop camera first to turn off the LED
+        drop(camera_handle);
+        drop(audio_handle);
         let _ = sender.close().await;
+        tracing::info!("Sender stopped, camera released");
 
         {
             let mut sender_state = state_clone.sender.write();
@@ -544,8 +542,8 @@ pub async fn stop_sender(state: Arc<AppState>) -> Result<(), String> {
         let _ = tx.send(()).await;
     }
 
-    // Wait for cleanup
-    tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+    // Wait for cleanup (camera thread join may take some time)
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
     // Clear state
     {

@@ -971,7 +971,19 @@ mod internal {
                 unsafe { msg_send![self.inner, unlockForConfiguration] }
             }
         }
+    }
 
+    impl Drop for AVCaptureDevice {
+        fn drop(&mut self) {
+            // Ensure device is unlocked when dropped
+            if self.locked {
+                self.locked = false;
+                unsafe { msg_send![self.inner, unlockForConfiguration] }
+            }
+        }
+    }
+
+    impl AVCaptureDevice {
         // thank you ffmpeg
         pub fn set_all(&mut self, descriptor: CameraFormat) -> Result<(), NokhwaError> {
             self.lock()?;
@@ -2439,6 +2451,16 @@ mod internal {
                 unsafe { msg_send![alloc, init] }
             };
             AVCaptureSession { inner: session }
+        }
+    }
+
+    impl Drop for AVCaptureSession {
+        fn drop(&mut self) {
+            // Ensure session is stopped when dropped
+            let running: BOOL = unsafe { msg_send![self.inner, isRunning] };
+            if running == YES {
+                unsafe { msg_send![self.inner, stopRunning] }
+            }
         }
     }
 }

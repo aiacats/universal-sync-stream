@@ -270,8 +270,14 @@ impl CameraCaptureHandle {
             }
 
             // Explicitly stop the camera stream before dropping
-            let _ = camera.stop_stream();
-            tracing::info!("Camera stream stopped");
+            tracing::info!("Stopping camera stream...");
+            match camera.stop_stream() {
+                Ok(_) => tracing::info!("Camera stream stopped successfully"),
+                Err(e) => tracing::error!("Failed to stop camera stream: {}", e),
+            }
+            tracing::info!("Dropping camera object...");
+            drop(camera);
+            tracing::info!("Camera object dropped");
         });
 
         // Wait for initialization
