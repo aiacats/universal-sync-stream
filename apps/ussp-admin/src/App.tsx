@@ -1,11 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import Dashboard from "./components/Dashboard";
 import Rooms from "./components/Rooms";
 import RoomDetail from "./components/RoomDetail";
 import Servers from "./components/Servers";
 import Settings from "./components/Settings";
-import { Tab, ServerConfig } from "./types";
+import { Tab, ServerConfig, HealthResponse } from "./types";
 
 function App() {
   const [tab, setTab] = useState<Tab>("dashboard");
@@ -13,6 +13,7 @@ function App() {
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
   const [serverUrl, setServerUrl] = useState("http://localhost:8080");
   const [error, setError] = useState<string | null>(null);
+  const autoConnectRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     // Load saved config on startup
@@ -21,6 +22,43 @@ function App() {
       setConnected(config.token !== null);
     });
   }, []);
+
+  // Auto-connect to local sidecar server when it becomes ready
+  useEffect(() => {
+    if (connected) {
+      if (autoConnectRef.current) {
+        clearInterval(autoConnectRef.current);
+        autoConnectRef.current = null;
+      }
+      return;
+    }
+
+    const checkAndConnect = async () => {
+      try {
+        const running = await invoke<boolean>("get_server_status");
+        if (!running) return;
+
+        // Server is running, try health check
+        const health = await invoke<HealthResponse>("health_check");
+        if (health.status === "ok") {
+          setConnected(true);
+        }
+      } catch {
+        // Server not ready yet
+      }
+    };
+
+    autoConnectRef.current = setInterval(checkAndConnect, 2000);
+    // Try immediately
+    checkAndConnect();
+
+    return () => {
+      if (autoConnectRef.current) {
+        clearInterval(autoConnectRef.current);
+        autoConnectRef.current = null;
+      }
+    };
+  }, [connected]);
 
   const handleConnect = async (url: string, apiKey: string) => {
     try {
@@ -53,7 +91,24 @@ function App() {
   };
 
   const renderContent = () => {
-    if (!connected && tab !== "settings") {
+    // Dashboard is always accessible (shows server control even when not connected)
+    if (tab === "dashboard") {
+      return <Dashboard />;
+    }
+
+    if (tab === "settings") {
+      return (
+        <Settings
+          serverUrl={serverUrl}
+          connected={connected}
+          onConnect={handleConnect}
+          onDisconnect={handleDisconnect}
+          error={error}
+        />
+      );
+    }
+
+    if (!connected) {
       return (
         <div className="not-connected">
           <div className="not-connected-content">
@@ -68,8 +123,6 @@ function App() {
     }
 
     switch (tab) {
-      case "dashboard":
-        return <Dashboard />;
       case "rooms":
         if (selectedRoom) {
           return <RoomDetail roomId={selectedRoom} onBack={handleBackToRooms} />;
@@ -77,16 +130,6 @@ function App() {
         return <Rooms onSelectRoom={handleSelectRoom} />;
       case "servers":
         return <Servers />;
-      case "settings":
-        return (
-          <Settings
-            serverUrl={serverUrl}
-            connected={connected}
-            onConnect={handleConnect}
-            onDisconnect={handleDisconnect}
-            error={error}
-          />
-        );
     }
   };
 

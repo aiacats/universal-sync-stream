@@ -67,5 +67,16 @@ export interface GlobalStatsResponse {
   total_bytes_forwarded: number;
 }
 
+// Sidecar server configuration
+export interface SidecarConfig {
+  server_id: string;
+  media_addr: string;
+  control_addr: string;
+  no_auth: boolean;
+  max_rooms: number;
+  max_participants: number;
+  log_level: string;
+}
+
 // Navigation tabs
 export type Tab = "dashboard" | "rooms" | "servers" | "settings";
