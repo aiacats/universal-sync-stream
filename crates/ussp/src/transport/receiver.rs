@@ -5,8 +5,8 @@ use super::MAX_PACKET_SIZE;
 use crate::error::Result;
 use crate::fec::{DecodeResult, FecConfig, FecDecoder};
 use crate::protocol::{
-    AudioFrame, AudioPayload, DmxFrame, DmxPayload, Packet, PacketType, Payload,
-    SessionAckPayload, SyncPoint, VideoFrame, VideoPayload,
+    AudioFrame, AudioPayload, DmxFrame, DmxPayload, MocapFrame, MocapPayload, Packet, PacketType,
+    Payload, SessionAckPayload, SyncPoint, VideoFrame, VideoPayload,
 };
 use bytes::Bytes;
 use std::collections::HashMap;
@@ -51,6 +51,8 @@ pub enum ReceiverEvent {
     AudioFrame(AudioFrame),
     /// A DMX frame was received (Art-Net compatible).
     DmxFrame(DmxFrame),
+    /// A motion capture frame was received (NatNet compatible).
+    MocapFrame(MocapFrame),
     /// A sync point was received.
     SyncPoint(SyncPoint),
     /// Session was initialized.
@@ -194,6 +196,9 @@ impl Receiver {
             }
             Payload::Dmx(payload) => {
                 self.handle_dmx(payload).await?;
+            }
+            Payload::Mocap(payload) => {
+                self.handle_mocap(payload).await?;
             }
             Payload::Sync(sync) => {
                 self.event_tx
@@ -387,6 +392,15 @@ impl Receiver {
         Ok(())
     }
 
+    /// Handle a motion capture payload.
+    async fn handle_mocap(&self, payload: MocapPayload) -> Result<()> {
+        self.event_tx
+            .send(ReceiverEvent::MocapFrame(payload.into()))
+            .await
+            .ok();
+        Ok(())
+    }
+
     /// Handle FEC repair packet.
     async fn handle_fec_repair(
         &self,
@@ -423,6 +437,12 @@ impl Receiver {
                             Payload::Dmx(d) => {
                                 self.event_tx
                                     .send(ReceiverEvent::DmxFrame(d.into()))
+                                    .await
+                                    .ok();
+                            }
+                            Payload::Mocap(m) => {
+                                self.event_tx
+                                    .send(ReceiverEvent::MocapFrame(m.into()))
                                     .await
                                     .ok();
                             }

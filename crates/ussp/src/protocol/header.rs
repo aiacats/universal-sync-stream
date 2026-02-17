@@ -33,6 +33,8 @@ pub enum PacketType {
     Heartbeat = 0x07,
     /// DMX frame data (Art-Net compatible).
     DmxFrame = 0x08,
+    /// Motion capture frame data (NatNet compatible).
+    MocapFrame = 0x09,
 }
 
 impl TryFrom<u8> for PacketType {
@@ -48,6 +50,7 @@ impl TryFrom<u8> for PacketType {
             0x06 => Ok(PacketType::SessionAck),
             0x07 => Ok(PacketType::Heartbeat),
             0x08 => Ok(PacketType::DmxFrame),
+            0x09 => Ok(PacketType::MocapFrame),
             _ => Err(Error::UnknownPacketType(value)),
         }
     }

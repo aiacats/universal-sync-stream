@@ -4,8 +4,8 @@ use super::session::{Session, SessionConfig, SessionState};
 use crate::error::{Error, Result};
 use crate::fec::{FecEncoder, FecGroup};
 use crate::protocol::{
-    AudioPayload, DmxPayload, FecRepairPayload, Flags, Packet, PacketHeader, PacketType, Payload,
-    SessionInitPayload, SyncPoint, VideoPayload, MAX_PAYLOAD_SIZE,
+    AudioPayload, DmxPayload, FecRepairPayload, Flags, MocapPayload, Packet, PacketHeader,
+    PacketType, Payload, SessionInitPayload, SyncPoint, VideoPayload, MAX_PAYLOAD_SIZE,
 };
 use bytes::Bytes;
 use std::net::SocketAddr;
@@ -286,6 +286,40 @@ impl Sender {
         }
 
         debug!("DMX frame sent");
+        Ok(())
+    }
+
+    /// Send a motion capture frame (NatNet compatible).
+    pub async fn send_mocap(&self, payload: MocapPayload) -> Result<()> {
+        let session = self.session.lock().await;
+        session.validate_active()?;
+
+        let mut flags = Flags::empty();
+        if self.config.fec_enabled {
+            flags |= Flags::FEC_PROTECTED;
+        }
+
+        let packet = Packet {
+            header: PacketHeader::new(
+                PacketType::MocapFrame,
+                session.session_id(),
+                session.next_sequence(),
+                Self::current_timestamp(),
+            )
+            .with_flags(flags),
+            payload: Payload::Mocap(payload),
+        };
+
+        let data = packet.encode()?;
+        self.socket.send_to(&data, self.dest_addr).await?;
+        session.record_sent(data.len());
+        drop(session);
+
+        if self.config.fec_enabled {
+            self.add_to_fec_group(data).await?;
+        }
+
+        debug!("Mocap frame sent");
         Ok(())
     }
 

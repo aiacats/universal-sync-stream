@@ -3,6 +3,7 @@
 mod audio;
 mod dmx;
 mod header;
+mod mocap;
 mod sync;
 mod types;
 mod video;
@@ -10,6 +11,7 @@ mod video;
 pub use audio::{AudioFrame, AudioPayload};
 pub use dmx::{DmxFrame, DmxPayload, DMX_CHANNELS_PER_UNIVERSE};
 pub use header::{PacketHeader, PacketType, HEADER_SIZE, MAGIC};
+pub use mocap::{LabeledMarker, MocapFrame, MocapPayload, RigidBody, Skeleton};
 pub use sync::{SyncPoint, TrackSyncInfo};
 pub use types::{AudioCodecType, CodecType, Flags, VideoCodecType};
 pub use video::{VideoFrame, VideoPayload};
@@ -48,6 +50,8 @@ pub enum Payload {
     Heartbeat,
     /// DMX frame data (Art-Net compatible).
     Dmx(DmxPayload),
+    /// Motion capture frame data (NatNet compatible).
+    Mocap(MocapPayload),
 }
 
 /// FEC repair packet payload.
@@ -112,6 +116,7 @@ impl Packet {
             Payload::SessionAck(s) => encode_session_ack(s, &mut buf)?,
             Payload::Heartbeat => {}
             Payload::Dmx(d) => d.encode(&mut buf)?,
+            Payload::Mocap(m) => m.encode(&mut buf)?,
         }
 
         Ok(buf.freeze())
@@ -130,6 +135,7 @@ impl Packet {
             PacketType::SessionAck => Payload::SessionAck(decode_session_ack(&mut data)?),
             PacketType::Heartbeat => Payload::Heartbeat,
             PacketType::DmxFrame => Payload::Dmx(DmxPayload::decode(&mut data)?),
+            PacketType::MocapFrame => Payload::Mocap(MocapPayload::decode(&mut data)?),
         };
 
         Ok(Packet { header, payload })

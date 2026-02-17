@@ -50,6 +50,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut video_frames = 0u64;
     let mut audio_frames = 0u64;
     let mut dmx_frames = 0u64;
+    let mut mocap_frames = 0u64;
     let mut last_video_pts = 0u64;
     let mut last_audio_pts = 0u64;
 
@@ -132,6 +133,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
 
+                ReceiverEvent::MocapFrame(frame) => {
+                    mocap_frames += 1;
+
+                    if mocap_frames % 120 == 0 {
+                        info!(
+                            "Received {} mocap frames (frame: {}, rigid_bodies: {}, skeletons: {}, markers: {})",
+                            mocap_frames,
+                            frame.frame_number,
+                            frame.rigid_bodies.len(),
+                            frame.skeletons.len(),
+                            frame.labeled_markers.len()
+                        );
+                    }
+                }
+
                 ReceiverEvent::SyncPoint(sync) => {
                     info!(
                         "Sync point: ref_time={}, video_pts={}, audio_tracks={}",
@@ -180,6 +196,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Video frames received: {}", video_frames);
     info!("Audio frames received: {}", audio_frames);
     info!("DMX frames received: {}", dmx_frames);
+    info!("Mocap frames received: {}", mocap_frames);
 
     if let Some(stats) = receiver.stats() {
         info!("Packets received: {}", stats.packets_received);

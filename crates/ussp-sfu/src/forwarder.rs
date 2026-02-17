@@ -14,6 +14,8 @@ pub struct Forwarder {
     pub forward_audio: bool,
     /// Forward DMX frames.
     pub forward_dmx: bool,
+    /// Forward motion capture frames.
+    pub forward_mocap: bool,
     /// Forward sync points.
     pub forward_sync: bool,
 }
@@ -24,6 +26,7 @@ impl Default for Forwarder {
             forward_video: true,
             forward_audio: true,
             forward_dmx: true,
+            forward_mocap: true,
             forward_sync: true,
         }
     }
@@ -41,6 +44,7 @@ impl Forwarder {
             PacketType::VideoFrame => self.forward_video,
             PacketType::AudioFrame => self.forward_audio,
             PacketType::DmxFrame => self.forward_dmx,
+            PacketType::MocapFrame => self.forward_mocap,
             PacketType::SyncPoint => self.forward_sync,
             PacketType::FecRepair => true, // Always forward FEC
             PacketType::SessionInit => false,
