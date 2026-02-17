@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "identifier": "com.ussp.admin",
   "build": {
-    "beforeBuildCommand": "npm run build",
-    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build:sidecar && npm run build",
+    "beforeDevCommand": "npm run build:sidecar && npm run dev",
     "devUrl": "http://localhost:1421",
     "frontendDist": "../dist"
   },
@@ -28,6 +28,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "externalBin": ["binaries/ussp-server"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

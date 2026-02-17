@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "build:sidecar": "cd ../../.. && cargo build -p ussp-server && cd apps/ussp-admin && node scripts/copy-sidecar.mjs",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri"

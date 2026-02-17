@@ -46,3 +46,6 @@ dist/
 # Temporary files
 *.tmp
 *.temp
+
+# Sidecar binaries
+apps/ussp-admin/src-tauri/binaries/
