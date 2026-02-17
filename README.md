@@ -7,6 +7,7 @@ USSPは、単一の映像信号と複数のマルチトラックオーディオ�
 - **映像・音声同期**: マイクロ秒精度のPTS（Presentation Timestamp）による正確な同期
 - **マルチトラックオーディオ**: 無制限のオーディオトラックをサポート
 - **DMX/Art-Net対応**: 照明制御データも映像・音声と同期して送信可能
+- **モーションキャプチャ対応**: NatNet（OptiTrack）互換のRigid Body・Skeleton・Labeled Markerデータを同期送信
 - **FEC (Forward Error Correction)**: Reed-Solomonコードによるパケットロス耐性
 - **フラグメンテーション**: 大きな映像フレームの自動分割・再構成
 - **低遅延設計**: リアルタイムストリーミング向けに最適化
@@ -48,6 +49,7 @@ USSPは、単一の映像信号と複数のマルチトラックオーディオ�
 | 0x06 | SessionAck    | セッション確認応答           |
 | 0x07 | Heartbeat     | キープアライブ               |
 | 0x08 | DmxFrame      | DMXデータ（Art-Net互換）     |
+| 0x09 | MocapFrame    | モーションキャプチャデータ   |
 
 ### フラグ
 
@@ -132,6 +134,36 @@ Art-Net互換のDMX512照明制御データを送信します。
 - **Universe**: Art-Net 15ビットポートアドレス (Net:7bit + SubNet:4bit + Universe:4bit)
 - **Channel Count**: 1-512チャンネル
 - **DMX Channel Data**: 各チャンネル0-255の値
+
+### モーションキャプチャペイロード (36バイトヘッダ + 可変長データ)
+
+NatNet（OptiTrack）互換のモーションキャプチャデータを送信します。
+
+```
+[ヘッダ - 36バイト]
+  PTS (μs)              : u64  (8)  - USSP同期用タイムスタンプ
+  Frame Number           : u32  (4)  - NatNetフレーム番号
+  Timecode               : u32  (4)  - SMPTEタイムコード
+  Timecode Subframe      : u32  (4)  - SMPTEサブフレーム
+  Timestamp              : f64  (8)  - NatNetタイムスタンプ（秒）
+  Rigid Body Count       : u16  (2)
+  Skeleton Count         : u16  (2)
+  Labeled Marker Count   : u16  (2)
+  Params                 : u16  (2)  - フレームレベルフラグ
+
+[Rigid Body - 各38バイト]
+  ID, Position(x/y/z), Rotation(qx/qy/qz/qw), Mean Error, Params
+
+[Skeleton - 可変長]
+  Skeleton ID, Bone Count, [Rigid Body × Bone Count]
+
+[Labeled Marker - 各26バイト]
+  ID, Position(x/y/z), Size, Params, Residual
+```
+
+- **Rigid Body**: 6DOF追跡データ（位置 + クォータニオン回転）
+- **Skeleton**: 骨格データ（Rigid Bodyの階層コレクション）
+- **Labeled Marker**: 個別マーカー（位置 + サイズ + トラッキングメタデータ）
 
 ## FEC (Forward Error Correction)
 
@@ -232,7 +264,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## USSP Studio (GUIアプリケーション)
 
-ストリーム送受信用GUIアプリケーション（Tauri 2 + React）が同梱されています。
+スタンドアロンで動作するストリーム送受信用GUIアプリケーション（Tauri 2 + React）です。
+SFUサーバーなしでP2P通信が可能で、SFU経由の配信にも対応しています。
 
 ### ビルド方法
 
@@ -289,7 +322,8 @@ npm run tauri build
 
 ## USSP Admin (SFU管理GUIアプリケーション)
 
-SFUサーバーを管理するためのデスクトップGUIアプリケーション（Tauri 2 + React）です。
+SFUサーバーを内蔵した管理デスクトップアプリケーション（Tauri 2 + React）です。
+SFUサーバー（ussp-server）をTauriサイドカーとしてバンドルしており、Admin起動時にSFUサーバーが自動的に起動します。
 
 ### ビルド方法
 
@@ -299,7 +333,7 @@ cd apps/ussp-admin
 # 依存関係インストール
 npm install
 
-# 開発モード
+# 開発モード（SFUサーバーのビルド→配置→Vite起動が自動実行されます）
 npm run tauri dev
 
 # リリースビルド
@@ -309,6 +343,8 @@ npm run tauri build
 ### 機能
 
 #### ダッシュボード
+- **ローカルSFUサーバー制御**: Start/Stop/Restartボタンによるサーバーライフサイクル管理
+- **サーバーログビューア**: サーバーのstdout/stderrをリアルタイム表示（折りたたみ式）
 - Control Planeのヘルス状態表示
 - グローバル統計（サーバー数、ルーム数、参加者数、転送量）
 - 5秒間隔の自動リフレッシュ
@@ -329,17 +365,17 @@ npm run tauri build
 - ロード状況のビジュアル表示
 - ルーム数・参加者数の確認
 
-#### 接続設定
-- Control Plane URL設定
-- API Key認証
+#### 設定
+- **ローカルサーバー設定**: Server ID、Media/Controlアドレス、最大ルーム数、最大参加者数、ログレベル、認証有効/無効
+- **リモート接続設定**: Control Plane URL、API Key認証
 - 接続状態表示
 
 ### 使用方法
 
-1. アプリケーションを起動
-2. 「Settings」タブでControl Plane URLとAPI Keyを入力
-3. 「Connect」をクリックして接続
-4. 「Dashboard」「Rooms」「Servers」タブで管理
+1. アプリケーションを起動（SFUサーバーが自動起動し、Control Planeに自動接続）
+2. 「Dashboard」タブでサーバーの動作状況とログを確認
+3. 「Rooms」「Servers」タブで管理
+4. 必要に応じて「Settings」タブでサーバー設定を変更（変更はサーバー停止中のみ可能）
 
 ### スクリーンショット概要
 
@@ -348,22 +384,34 @@ npm run tauri build
 │  USSP Admin   [Dashboard] [Rooms] [Servers] [Settings]  ●  │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
+│  Local SFU Server                              [Running]    │
+│  [Stop] [Restart] [Show Logs]                               │
+│                                                             │
 │  Control Plane Status                          [Healthy]    │
 │  Version: 0.1.0                                             │
 │                                                             │
 │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐           │
-│  │    3    │ │   12    │ │   45    │ │ 1.2 GB  │           │
+│  │    1    │ │    0    │ │    0    │ │   0 B   │           │
 │  │ Servers │ │  Rooms  │ │ Users   │ │Forwarded│           │
 │  └─────────┘ └─────────┘ └─────────┘ └─────────┘           │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
 ```
 
+### アーキテクチャ
+
+```
+USSP Admin (Tauri)
+├── Tauriサイドカー: ussp-server（自動起動/自動停止）
+├── Rustバックエンド: SidecarState（ライフサイクル管理・ログキャプチャ）
+└── Reactフロントエンド: サーバー制御UI・管理画面
+```
+
 ### 注意事項
 
-- 管理対象のSFUサーバー（ussp-server）が起動している必要があります
-- admin ロールのAPI Keyが必要です
-- 開発モード（`--no-auth`）で起動されたサーバーには任意のAPI Keyで接続可能
+- SFUサーバーはアプリ起動時に自動起動し、アプリ終了時にgraceful stopされます
+- デフォルトでは認証無効（`--no-auth`）で起動します。本番環境では Settings で認証を有効にしてください
+- ポートが競合する場合はSettingsでアドレスを変更し、サーバーを再起動してください
 
 ## USSP SFUサーバー
 
@@ -576,6 +624,7 @@ ussp/                               # ワークスペースルート
 │   │   │   │   ├── video.rs        # 映像ペイロード
 │   │   │   │   ├── audio.rs        # 音声ペイロード
 │   │   │   │   ├── dmx.rs          # DMXペイロード
+│   │   │   │   ├── mocap.rs        # モーションキャプチャペイロード
 │   │   │   │   ├── sync.rs         # 同期ポイント
 │   │   │   │   └── types.rs        # 共通型
 │   │   │   ├── transport/          # 送受信実装
@@ -629,21 +678,25 @@ ussp/                               # ワークスペースルート
     │   ├── package.json
     │   └── README.md
     │
-    └── ussp-admin/                 # SFU管理GUI
+    └── ussp-admin/                 # SFU管理GUI（SFUサーバー内蔵）
         ├── src-tauri/              # Tauri バックエンド
         │   ├── Cargo.toml
+        │   ├── binaries/           # サイドカーバイナリ（自動生成）
         │   └── src/
         │       ├── lib.rs          # Tauriコマンド
         │       ├── api.rs          # HTTPクライアント
+        │       ├── sidecar.rs      # SFUサーバーサイドカー管理
         │       └── main.rs         # エントリポイント
+        ├── scripts/
+        │   └── copy-sidecar.mjs    # サイドカーバイナリ配置スクリプト
         ├── src/                    # React フロントエンド
         │   ├── App.tsx             # メインコンポーネント
         │   ├── components/         # UIコンポーネント
-        │   │   ├── Dashboard.tsx   # ダッシュボード
+        │   │   ├── Dashboard.tsx   # ダッシュボード（サーバー制御含む）
         │   │   ├── Rooms.tsx       # ルーム一覧
         │   │   ├── RoomDetail.tsx  # ルーム詳細
         │   │   ├── Servers.tsx     # サーバー一覧
-        │   │   └── Settings.tsx    # 接続設定
+        │   │   └── Settings.tsx    # 接続設定・サーバー設定
         │   └── types/              # 型定義
         └── package.json
 ```
@@ -663,16 +716,16 @@ cargo run --example sender
 ### SFUサーバー経由の通信テスト
 
 ```bash
-# ターミナル1: SFUサーバー起動
-cargo run -p ussp-server -- --no-auth
+# ターミナル1: Admin起動（SFUサーバーが自動起動します）
+cd apps/ussp-admin && npm install && npm run tauri dev
 
-# ターミナル2: ルーム作成
+# ターミナル2: AdminのDashboardからルームを作成、またはcurlで作成
 curl -X POST http://localhost:8080/api/v1/rooms \
   -H "Content-Type: application/json" \
   -d '{"room_id": "test-room"}'
 
-# ターミナル3: GUIテスターで送受信
-cd apps/ussp-studio && npm run tauri dev
+# ターミナル3: Studioで送受信
+cd apps/ussp-studio && npm install && npm run tauri dev
 ```
 
 ## テスト

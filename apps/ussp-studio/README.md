@@ -1,11 +1,13 @@
 # USSP Studio
 
 USSPプロトコルによるストリーム送受信GUIアプリケーションです。Tauri 2 + React + TypeScriptで構築されています。
+SFUサーバーなしでP2P通信が可能なスタンドアロンアプリケーションであり、SFU経由の配信にも対応しています。
 
 ## 必要環境
 
 - Node.js 18以上
 - Rust 1.70以上
+- ffmpeg（カメラキャプチャに使用）
 - macOS / Windows / Linux
 
 ## セットアップ
@@ -92,6 +94,7 @@ USSPストリームを受信し、映像プレビューと統計を表示しま�
 - **Bytes Received**: 受信バイト数
 - **Video Frames**: 受信映像フレーム数
 - **Audio Frames**: 受信音声フレーム数
+- **Mocap Frames**: モーションキャプチャフレーム数
 - **Packet Loss**: パケットロス率
 - **A/V Sync Diff**: 映像と音声の同期差（マイクロ秒）
 - **FPS**: 現在のフレームレート
@@ -103,6 +106,10 @@ USSPストリームを受信し、映像プレビューと統計を表示しま�
 #### 音声レベルメーター
 
 各オーディオトラックのレベル（dB）をリアルタイム表示します。
+
+#### モーションキャプチャ
+
+NatNet（OptiTrack）互換のモーションキャプチャデータ（Rigid Body、Skeleton、Labeled Marker）を受信します。
 
 ---
 
