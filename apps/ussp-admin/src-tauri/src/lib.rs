@@ -2,15 +2,18 @@
 
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tauri::State;
+use tauri::{Manager, State};
 use tokio::sync::RwLock;
+use tracing::{error, info};
 
 mod api;
+mod sidecar;
 
 /// Application state
 pub struct AppState {
     pub client: api::ApiClient,
     pub config: RwLock<ServerConfig>,
+    pub sidecar: Arc<sidecar::SidecarState>,
 }
 
 /// Server configuration
@@ -32,7 +35,7 @@ impl Default for ServerConfig {
 }
 
 // ============================================================================
-// Tauri Commands
+// Existing Tauri Commands
 // ============================================================================
 
 #[tauri::command]
@@ -195,17 +198,91 @@ async fn get_global_stats(
         .await
 }
 
+// ============================================================================
+// Sidecar Tauri Commands
+// ============================================================================
+
+#[tauri::command]
+async fn start_server(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    state.sidecar.start(&app).await
+}
+
+#[tauri::command]
+async fn stop_server(state: State<'_, Arc<AppState>>) -> Result<(), String> {
+    state.sidecar.stop().await
+}
+
+#[tauri::command]
+async fn restart_server(
+    app: tauri::AppHandle,
+    state: State<'_, Arc<AppState>>,
+) -> Result<(), String> {
+    state.sidecar.stop().await?;
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    state.sidecar.start(&app).await
+}
+
+#[tauri::command]
+async fn get_server_status(state: State<'_, Arc<AppState>>) -> Result<bool, String> {
+    Ok(state.sidecar.is_running().await)
+}
+
+#[tauri::command]
+async fn get_server_logs(state: State<'_, Arc<AppState>>) -> Result<Vec<String>, String> {
+    Ok(state.sidecar.get_logs().await)
+}
+
+#[tauri::command]
+async fn get_sidecar_config(
+    state: State<'_, Arc<AppState>>,
+) -> Result<sidecar::SidecarConfig, String> {
+    Ok(state.sidecar.get_config().await)
+}
+
+#[tauri::command]
+async fn set_sidecar_config(
+    state: State<'_, Arc<AppState>>,
+    config: sidecar::SidecarConfig,
+) -> Result<(), String> {
+    if state.sidecar.is_running().await {
+        return Err("Cannot change config while server is running. Stop the server first.".into());
+    }
+    state.sidecar.set_config(config).await;
+    Ok(())
+}
+
+// ============================================================================
+// Application Entry Point
+// ============================================================================
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let sidecar_state = Arc::new(sidecar::SidecarState::new());
     let app_state = Arc::new(AppState {
         client: api::ApiClient::new(),
         config: RwLock::new(ServerConfig::default()),
+        sidecar: Arc::clone(&sidecar_state),
     });
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .manage(app_state)
+        .setup(move |app| {
+            // Auto-start the SFU server sidecar on launch
+            let handle = app.handle().clone();
+            let sidecar = Arc::clone(&sidecar_state);
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = sidecar.start(&handle).await {
+                    error!("Failed to auto-start SFU server: {}", e);
+                }
+            });
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
+            // Existing commands
             get_config,
             set_config,
             connect,
@@ -220,7 +297,29 @@ pub fn run() {
             remove_participant,
             get_servers,
             get_global_stats,
+            // Sidecar commands
+            start_server,
+            stop_server,
+            restart_server,
+            get_server_status,
+            get_server_logs,
+            get_sidecar_config,
+            set_sidecar_config,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if let tauri::RunEvent::ExitRequested { .. } = event {
+                // Gracefully stop sidecar on application exit
+                let state = app.state::<Arc<AppState>>();
+                let sidecar: Arc<sidecar::SidecarState> = Arc::clone(&state.sidecar);
+                tauri::async_runtime::block_on(async {
+                    if let Err(e) = sidecar.stop().await {
+                        error!("Failed to stop sidecar on exit: {}", e);
+                    } else {
+                        info!("SFU server sidecar stopped on exit");
+                    }
+                });
+            }
+        });
 }
