@@ -2,6 +2,37 @@
 
 ---
 
+## 2026-02-17
+
+### 実装内容
+
+#### NatNet モーションキャプチャデータ伝送対応
+- USSPプロトコルに NatNet（OptiTrack）互換のモーションキャプチャデータ伝送を追加
+- パケットタイプ `0x09: MocapFrame` として実装
+- 対応データタイプ: Rigid Body（6DOF追跡）、Skeleton（骨格階層）、Labeled Marker（マーカー追跡）、フレームメタデータ（SMPTE タイムコード、NatNetタイムスタンプ）
+- 36バイト固定ヘッダ + 可変長ペイロードのバイナリフォーマット
+- DMXと同一のパターンで送受信・FEC復元を統合
+- Rustのインストールも実施（rustup v1.93.1 stable）
+
+### 変更ファイル
+- crates/ussp/src/protocol/mocap.rs（新規）: MocapPayload, MocapFrame, RigidBody, Skeleton, LabeledMarker の定義とencode/decode
+- crates/ussp/src/protocol/header.rs: PacketType::MocapFrame = 0x09 追加
+- crates/ussp/src/protocol/mod.rs: Payload::Mocap バリアント追加、encode/decode対応
+- crates/ussp/src/transport/sender.rs: send_mocap() メソッド追加
+- crates/ussp/src/transport/receiver.rs: ReceiverEvent::MocapFrame、handle_mocap()、FEC復元対応
+- crates/ussp-sfu/src/forwarder.rs: forward_mocap フラグ追加
+- crates/ussp/examples/receiver.rs: MocapFrame受信ハンドリング追加
+
+### コミット
+- 9d2b18e: feat(protocol): Add NatNet motion capture data support
+
+### 潜在的問題・懸念点
+- 大規模なモーキャプシーン（数百のRigid Body等）ではペイロードがMTUを超えるため、IP層フラグメンテーションに依存する。制限されたMTU環境では問題になる可能性あり
+- NatNetプロトコルのForce Plate、Device、Unlabeled Marker、Asset（NatNet 4.1+）には未対応
+- SyncPointにモーキャプ固有の同期情報は未追加（現状はPTSベースの同期のみ）
+
+---
+
 ## 2026-02-08 (2)
 
 ### 実装内容

@@ -212,6 +212,16 @@ pub async fn start_receiver(
                             let _ = app_clone.emit("ussp://dmx-frame", dmx_data);
                         }
 
+                        Some(ReceiverEvent::MocapFrame(frame)) => {
+                            let _ = app_clone.emit("ussp://mocap-frame", serde_json::json!({
+                                "frame_number": frame.frame_number,
+                                "pts": frame.pts,
+                                "rigid_bodies": frame.rigid_bodies.len(),
+                                "skeletons": frame.skeletons.len(),
+                                "labeled_markers": frame.labeled_markers.len(),
+                            }));
+                        }
+
                         Some(ReceiverEvent::SyncPoint(sync)) => {
                             let audio_pts: Vec<u64> = sync.audio_tracks.iter().map(|t| t.pts).collect();
                             let av_diff = if !audio_pts.is_empty() {
