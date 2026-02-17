@@ -30,18 +30,18 @@ pub fn create_router(state: AppState) -> Router {
         // Room management
         .route("/rooms", get(list_rooms))
         .route("/rooms", post(create_room))
-        .route("/rooms/:room_id", get(get_room))
-        .route("/rooms/:room_id", delete(close_room))
-        .route("/rooms/:room_id/stats", get(get_room_stats))
-        .route("/rooms/:room_id/participants", get(list_participants))
-        .route("/rooms/:room_id/participants", post(add_participant))
+        .route("/rooms/{room_id}", get(get_room))
+        .route("/rooms/{room_id}", delete(close_room))
+        .route("/rooms/{room_id}/stats", get(get_room_stats))
+        .route("/rooms/{room_id}/participants", get(list_participants))
+        .route("/rooms/{room_id}/participants", post(add_participant))
         .route(
-            "/rooms/:room_id/participants/:participant_id",
+            "/rooms/{room_id}/participants/{participant_id}",
             delete(remove_participant),
         )
         // Server management
         .route("/servers", get(list_servers))
-        .route("/servers/:server_id/stats", get(get_server_stats))
+        .route("/servers/{server_id}/stats", get(get_server_stats))
         // Stats
         .route("/stats", get(get_global_stats));
 
